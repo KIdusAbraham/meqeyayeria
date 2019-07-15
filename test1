@@ -8,8 +8,11 @@ I’m not sure if this is setup to be auto-forwarded to your gmail account or no
 
  
 
-Secondly, you’ll need to login to each environment and ultimately document what is where, setup a daily checklist for priority items to verify, resource capacity, verifying that each SQL environment is “healthy” and running to the best it can for our interactive users and applications.
+Secondly, you’ll need to login to each environment and ultimately document what is where, 
+setup a daily checklist for priority items to verify, resource capacity, verifying that each SQL 
+environment is “healthy” and running to the best it can for our interactive users and applications.
 
 
-As users submit requests for SQL reports and data inquiries, new tables or modifications to existing tables, we will be reaching out to you for assistance.
+As users submit requests for SQL reports and data inquiries, new tables or modifications to existing tables, 
+we will be reaching out to you for assistance.
 
