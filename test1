@@ -1,1 +1,8 @@
-https://docs.microsoft.com/en-us/sql/relational-databases/system-dynamic-management-views/sys-dm-os-volume-stats-transact-sql?view=sql-server-2017
+SELECT db_name (f.database_id) DBName, file_name(f.file_id) [file_name], 
+		volume_mount_point, 
+		total_bytes, 
+		available_bytes,
+		(cast(available_bytes as numeric))/(cast (total_bytes as numeric))*100  percent_used
+
+FROM sys.master_files AS f  
+CROSS APPLY sys.dm_os_volume_stats(f.database_id, f.file_id);  
