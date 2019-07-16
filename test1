@@ -1,12 +1,17 @@
---query to get the maximum size of the column in the table
-Declare @table nvarchar (128)
-Declare @idcol nvarchar (128)
-Declare @sql nvarchar (max)
-  	--initialize the table 
-Set @table = '[HumanResources].[Department]' --tablename
-Set @sql = 'select ( 0 '
-Select @sql = @sql + ' + MAX(ISNULL(datalength(' + name + '), 1))'
-	From sys.columns
-	Where object_id = object_id(@table) and is_computed = 0
-Set @sql = @sql + ') as rowsize from ' + @table
-Exec (@sql) 
+		Select object_schema_name (p.object_id) table_schema
+			Object_name(p.Object_id) table_name,
+			p.index_id
+			p.partition_number,
+			au.allocation_unit_id,
+			au.type_desc,
+			au.total_page
+			au.used_pages,
+			au.data_pages
+		from sys.system_internals_allocation_units au
+		join sys.partitions p
+			on au.container_id = p.partition_id
+		order by table_schema,
+			table_name,
+			p.index_id
+			p.partition_number
+			au.type
