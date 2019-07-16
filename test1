@@ -1,3 +1,1 @@
-Secondly, you’ll need to login to each environment and ultimately document what is where, 
-setup a daily checklist for priority items to verify, resource capacity, verifying that each SQL 
-environment is “healthy” and running to the best it can for our interactive users and applications.
+https://docs.microsoft.com/en-us/sql/relational-databases/system-dynamic-management-views/sys-dm-os-volume-stats-transact-sql?view=sql-server-2017
