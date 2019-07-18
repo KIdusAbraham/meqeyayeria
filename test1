@@ -1,17 +1,51 @@
-		Select object_schema_name (p.object_id) table_schema
-			Object_name(p.Object_id) table_name,
-			p.index_id
-			p.partition_number,
-			au.allocation_unit_id,
-			au.type_desc,
-			au.total_page
-			au.used_pages,
-			au.data_pages
-		from sys.system_internals_allocation_units au
-		join sys.partitions p
-			on au.container_id = p.partition_id
-		order by table_schema,
-			table_name,
-			p.index_id
-			p.partition_number
-			au.type
+-- the following script is used to check the number of connection to the database server 
+	--https://www.mssqltips.com/sqlservertip/3171/identify-sql-server-databases-that-are-no-longer-in-use/
+
+
+--1. SQL Server Logon Trigger:
+	-- this is the best approach when you want to decide something for your database that are not used by applications
+
+	---we are using the logon trigger to store all logins
+	-- first create a table to save all incoming logins as follows
+
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ServerLogonHistory](
+ [SystemUser] [varchar](512) NULL,
+ [HostName] [varchar](512) NULL,
+ [DBUser] [varchar](512) NULL,
+ [SPID] [int] NULL,
+ [LogonTime] [datetime] NULL,
+ [AppName] [varchar](512) NULL,
+ [DatabaseName] [varchar](512) NULL
+) ON [PRIMARY]
+GO
+
+
+	-- Then create the trigger as follow
+USE [master]
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TRIGGER [Connections]
+ON ALL SERVER WITH EXECUTE AS 'sa'
+FOR LOGON 
+AS
+BEGIN
+INSERT INTO ServerLogonHistory
+SELECT ORIGINAL_LOGIN(), HOST_NAME(),USER, @@SPID, GETDATE(), APP_NAME(), DB_NAME()
+END
+GO
+SET ANSI_NULLS OFF
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+ENABLE TRIGGER [Connections] ON ALL SERVER
+GO
