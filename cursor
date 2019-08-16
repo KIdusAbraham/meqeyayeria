@@ -1,0 +1,66 @@
+USE [AAAAAA]
+
+CREATE TABLE #Tble3
+	(
+	contact varchar (20),
+	[date] date
+	)
+DECLARE @DateList date -- database name 
+DECLARE @ContractList VARCHAR(30) -- path for backup files 
+DECLARE @fileName VARCHAR(256) -- filename for backup 
+DECLARE @fileDate VARCHAR(20) -- used for file name 
+
+--INNER CURSOR 
+DECLARE Contract_CURSOR FOR 
+SELECT alternate_ID
+from #Table2
+OPEN Contract_CURSOR  
+FETCH NEXT FROM Contract_CURSOR INTO @ContractList
+WHILE @@FETCH_STATUS = 0  
+--CREATE TABLE #TEMTABLE (
+INSERT INTO #Tble3
+SELECT @ContractList, DateData
+		from #DateTable 
+--BEGIN
+--		--INNER CURSOR 
+--		DECLARE date_cursor CURSOR FOR 
+--		SELECT DateData
+--		from #DateTable 
+--		OPEN date_cursor  
+--		FETCH NEXT FROM db_cursor INTO @DateList
+--		WHILE @@FETCH_STATUS = 0  
+--		BEGIN
+--		IF @DateList = SELECT Date from )
+--			BEGIN
+--				INSERT INTO #TEMTABLE (LISTOF COLUMNS)
+--				VALUES(@DateList, select * from #TEMPPPPPP)
+--			END
+--		ELSE
+--			BEGIN
+--				INSERT INTO #TEMTABLE (LISTOF COLUMNS)
+--				VALUES(@DateList, select * from #TEMPPPPPP)
+--			END
+    
+--			FETCH NEXT FROM date_cursor INTO @DateList 
+--		END
+--		CLOSE date_cursor  
+--		DEALLOCATE date_cursor
+FETCH NEXT FROM Contract_CURSOR INTO @DateList 
+END
+CLOSE Contract_CURSOR 
+DEALLOCATE Contract_CURSOR
+
+
+select 
+
+
+
+CASE  WHEN @DateList = jjjjj
+INSERT INTO #TEMTABLE
+
+
+SELECT *
+     CASE
+	 WHEN @DateList = 
+FROM 
+
