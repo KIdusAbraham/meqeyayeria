@@ -1,66 +1,214 @@
-USE [AAAAAA]
+/*
+The follwing are list of table from the databse used for the report 
+LS_BILLING_NF, LS_MASTER_NF, LS_FLOAT_NF, LS_INCOME_NF, LS_CTD_PYMTHIST_NF
+*/
 
-CREATE TABLE #Tble3
+USE [IL10_IBERIA]
+
+DECLARE @startDate DATE
+DECLARE @endDate DATE
+DECLARE @NumberofDays int 
+SET @startDate = (SELECT DATEADD(d, 1, PREV_CURRENT_MONTH) FROM PARAMETER_NF WHERE ALTERNATE_ID = '00*00')
+SET @endDate = (SELECT CURRENT_MONTH FROM PARAMETER_NF WHERE ALTERNATE_ID = '00*00')
+SET @NumberofDays = DATEDIFF(DAY, @endDate, @startDate)  
+
+
+--Create a Temp table to get list of days in the month 
+;WITH DateRange(DateData) AS 
+(
+    SELECT @startDate as Date
+    UNION ALL
+    SELECT DATEADD(d,1,DateData)
+    FROM DateRange 
+    WHERE DateData < @endDate
+)
+SELECT DateData
+INTO #DateTable 
+FROM DateRange
+OPTION (MAXRECURSION 0)
+
+
+--Get all the records needed from the tables 
+
+SELECT
+	lbn.ALTERNATE_ID,
+--	lbn.LEASE_TYPE,
+	lmn.PRODUCT_LINE,
+--	lbn.FLOAT_RATE,
+--	ISNULL(lfn.FLOAT_TYPE, '') AS 'FLOAT_TYPE',
+--	DATEADD(d, 1, @startDate) AS '@startDate',
+--	@endDate AS '@endDate',
+--	PAYHIST.ID,
+--	PAYHIST.H_POSTING_DATE,
+	PAYHIST.H_DATE_RECEIVED,
+--	ISNULL(CAST(DATEADD(d, 1, @endDate) - CAST(PAYHIST.H_POSTING_DATE AS datetime) AS int), 0) AS 'Days until EOM',
+	ISNULL(PAYHIST.RENTAL, 0) AS 'RENTAL',
+--	lbn.CBR,
+	ISNULL(lfn.PRIN_REMAIN, 0) AS 'PRIN_REMAIN',
+	--ISNULL(lin.PRINCIPAL_BALANCE, 0) AS 'PRINCIPAL_BALANCE',
+	lmn.LS_NET_INVEST,
+	lmn.BLENDED_NET_INVEST
+--	CAST(@endDate - @startDate AS int) AS 'Days in month'
+into #DataTable
+FROM LS_BILLING_NF lbn
+	JOIN LS_MASTER_NF lmn ON lbn.ALTERNATE_ID = lmn.ALTERNATE_ID
+	LEFT JOIN LS_FLOAT_NF lfn ON lbn.ALTERNATE_ID = lfn.ALTERNATE_ID
+	LEFT JOIN LS_INCOME_NF lin ON lmn.ALTERNATE_ID = lin.ALTERNATE_ID
+	LEFT JOIN	(
+					SELECT
+						--ID,
+						H_CONTRACT_KEY,
+						--H_POSTING_DATE,
+						H_DATE_RECEIVED,
+						SUM((ISNULL(H_FUTURE_91, 0) + ISNULL(H_FUTURE_61, 0) + ISNULL(H_FUTURE_31, 0) + ISNULL(H_CURRENT_RENTAL, 0) + ISNULL(H_PAST_1, 0) + ISNULL(H_PAST_31, 0) + ISNULL(H_PAST_61, 0) + ISNULL(H_PAST_91, 0))) AS 'RENTAL'
+					FROM LS_CTD_PYMTHIST_NF
+					GROUP BY
+						H_CONTRACT_KEY,
+						H_DATE_RECEIVED
+						--H_POSTING_DATE,
+						--ID
+				) PAYHIST ON lmn.ALTERNATE_ID = PAYHIST.H_CONTRACT_KEY AND /*PAYHIST.H_POSTING_DATE*/ PAYHIST.H_DATE_RECEIVED BETWEEN (@startDate) AND @endDate
+ORDER BY ALTERNATE_ID, /*PAYHIST.H_POSTING_DATE*/ PAYHIST.H_DATE_RECEIVED DESC
+
+
+CREATE TABLE #ContractAndDateStagingTable
 	(
 	contact varchar (20),
-	[date] date
+	[date] date,
+
 	)
-DECLARE @DateList date -- database name 
-DECLARE @ContractList VARCHAR(30) -- path for backup files 
-DECLARE @fileName VARCHAR(256) -- filename for backup 
+DECLARE @DATE_RECEIVED date -- database name 
+DECLARE @ContractList VARCHAR(20) -- path for backup files 
 DECLARE @fileDate VARCHAR(20) -- used for file name 
+DECLARE @SQL VARCHAR (2000)
 
 --INNER CURSOR 
-DECLARE Contract_CURSOR FOR 
-SELECT alternate_ID
-from #Table2
+DECLARE Contract_CURSOR CURSOR FOR 
+SELECT distinct alternate_ID
+from #DataTable
+
 OPEN Contract_CURSOR  
 FETCH NEXT FROM Contract_CURSOR INTO @ContractList
 WHILE @@FETCH_STATUS = 0  
 --CREATE TABLE #TEMTABLE (
-INSERT INTO #Tble3
-SELECT @ContractList, DateData
-		from #DateTable 
---BEGIN
---		--INNER CURSOR 
---		DECLARE date_cursor CURSOR FOR 
---		SELECT DateData
---		from #DateTable 
---		OPEN date_cursor  
---		FETCH NEXT FROM db_cursor INTO @DateList
---		WHILE @@FETCH_STATUS = 0  
---		BEGIN
---		IF @DateList = SELECT Date from )
---			BEGIN
---				INSERT INTO #TEMTABLE (LISTOF COLUMNS)
---				VALUES(@DateList, select * from #TEMPPPPPP)
---			END
---		ELSE
---			BEGIN
---				INSERT INTO #TEMTABLE (LISTOF COLUMNS)
---				VALUES(@DateList, select * from #TEMPPPPPP)
---			END
-    
---			FETCH NEXT FROM date_cursor INTO @DateList 
---		END
---		CLOSE date_cursor  
---		DEALLOCATE date_cursor
-FETCH NEXT FROM Contract_CURSOR INTO @DateList 
+BEGIN
+--INSERT INTO #Tble3
+INSERT INTO #ContractAndDateStagingTable
+SELECT @ContractList , DateData
+		--,CASE 
+		--WHEN dt.DateData = (SELECT H_DATE_RECEIVED FROM #temppp) then dt.DateData
+		--ELSE NULL
+		--END AS H_DATE_RECEIVED 
+FROM #DateTable dt
+
+----Create a dynamic query to generate tables for each contract
+--SET @SQL = 'SELECT ' + @ContractList + ' AS cotract, DateData AS DateData
+--		INTO #'+'Temm'+@ContractList + ' from #DateTable'
+----PRINT @SQL
+--EXEC @SQL
+FETCH NEXT FROM Contract_CURSOR INTO @ContractList
 END
 CLOSE Contract_CURSOR 
 DEALLOCATE Contract_CURSOR
 
+--Create a temporary table to hold the date 
+SELECT dt.contact, dt.date, 
+		(Case
+		when dt.date = (select tp.H_DATE_RECEIVED from #temppp tp 
+		where tp.ALTERNATE_ID COLLATE DATABASE_DEFAULT = dt.contact COLLATE DATABASE_DEFAULT
+		AND tp.H_DATE_RECEIVED= dt.date) then dt.date
+		ELSE NULL
+		END) DATE_RECIEVEDD
+		INTO #date_andCONTRACT
+FROM  #ContractAndDateStagingTable dt
 
-select 
+--where dt.contact = '001-9001015-002'
+
+
+SELECT FINAL.contact, FINAL.date, 
+
+		CASE
+			WHEN FINAL.RENTAL is null then 0
+			ELSE FINAL.RENTAL
+		END AS [Rental Pymts], 
+		CASE 
+			WHEN FINAL.date = @endDate THEN
+				IF FINAL.PRIN_REMAIN <>0
+					BEGIN
+					 FINAL.PRIN_REMAIN
+					END
+				ELSE
+					BEGIN
+				IF FINAL.PRODUCT_LINE = '0009'
+					BEGIN
+					FINAL.BLENDED_NET_INVEST
+					END
+				ELSE
+					BEGIN
+					FINAL.LS_NET_INVEST
+					END
+				END
+			ELSE 
+				(SELECT SUM(BALANCE) OVER (PARTITION BY FINAL.contact
+							  ORDER BY FINAL.contact
+								  ROWS @NumberofDays PRECEDING) 
+		END AS BALANCE,-- 10 should be replaced by the number of days in the month
+
+		AVG(FINAL.Balance) OVER(PARTITION BY FINAL.contact) AS 'Daily Average Balance'
+
+FROM 
+(
+SELECT dt.contact, dt.date, tp.PRODUCT_LINE, tp.H_DATE_RECEIVED, tp.RENTAL, tp.PRIN_REMAIN, tp.LS_NET_INVEST, tp.BLENDED_NET_INVEST
+FROM #date_andCONTRACT dt 
+LEFT JOIN #temppp tp on tp.ALTERNATE_ID COLLATE DATABASE_DEFAULT = dt.contact COLLATE DATABASE_DEFAULT
+		AND dt.DATE_RECIEVEDD = tp.H_DATE_RECEIVED
+) AS FINAL
+ORDER BY FINAL.contact, FINAL.date DESC;
+--where FINAL.contact = '001-9001015-002'
 
 
 
-CASE  WHEN @DateList = jjjjj
-INSERT INTO #TEMTABLE
+DROP TABLE #DateTable 
+DROP TABLE #DataTable
+DROP TABLE #ContractAndDateStagingTable
+--DROP TABLE 
+
+
+
+/*
 
 
 SELECT *
-     CASE
-	 WHEN @DateList = 
-FROM 
+FROM  #DateTable dt
+--DROP TABLE #DateTable
 
+
+SELECT *
+FROM  #DateTable dt
+--DROP TABLE #DateTable
+
+
+
+
+SELECT * FROM #Tble3
+
+
+
+SELECT *
+FROM #temppp
+--order by ALTERNATE_ID
+where ALTERNATE_ID = '001-0001002-003'
+
+SELECT * FROM #DateTable dt
+LEFT JOIN #temppp tp on tp.H_DATE_RECEIVED = dt.DateData
+AND tp.ALTERNATE_ID = '001-0001002-003'
+
+
+
+Drop Table #Tble3
+
+
+
+
+
+*/
