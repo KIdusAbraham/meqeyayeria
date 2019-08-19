@@ -8,6 +8,10 @@ USE [IL10_IBERIA]
 DECLARE @startDate DATE
 DECLARE @endDate DATE
 DECLARE @NumberofDays int 
+--DECLARE @DATE_RECEIVED date -- database name 
+DECLARE @ContractList VARCHAR(20) -- path for backup files 
+--DECLARE @fileDate VARCHAR(20) -- used for file name 
+--DECLARE @SQL VARCHAR (2000)
 SET @startDate = (SELECT DATEADD(d, 1, PREV_CURRENT_MONTH) FROM PARAMETER_NF WHERE ALTERNATE_ID = '00*00')
 SET @endDate = (SELECT CURRENT_MONTH FROM PARAMETER_NF WHERE ALTERNATE_ID = '00*00')
 SET @NumberofDays = DATEDIFF(DAY, @endDate, @startDate)  
@@ -26,7 +30,6 @@ SELECT DateData
 INTO #DateTable 
 FROM DateRange
 OPTION (MAXRECURSION 0)
-
 
 --Get all the records needed from the tables 
 
@@ -49,6 +52,7 @@ SELECT
 	lmn.LS_NET_INVEST,
 	lmn.BLENDED_NET_INVEST
 --	CAST(@endDate - @startDate AS int) AS 'Days in month'
+--Store outputs of the query into #DataTable temporary table 
 into #DataTable
 FROM LS_BILLING_NF lbn
 	JOIN LS_MASTER_NF lmn ON lbn.ALTERNATE_ID = lmn.ALTERNATE_ID
@@ -71,12 +75,14 @@ FROM LS_BILLING_NF lbn
 ORDER BY ALTERNATE_ID, /*PAYHIST.H_POSTING_DATE*/ PAYHIST.H_DATE_RECEIVED DESC
 
 
+--Create a staging table that is used to store the data from the following cursor 
 CREATE TABLE #ContractAndDateStagingTable
 	(
 	contact varchar (20),
 	[date] date,
 
 	)
+--Create a cursor to append all contract to list of the days in the month as provided by @startDate and @endDate 
 DECLARE @DATE_RECEIVED date -- database name 
 DECLARE @ContractList VARCHAR(20) -- path for backup files 
 DECLARE @fileDate VARCHAR(20) -- used for file name 
@@ -92,7 +98,7 @@ FETCH NEXT FROM Contract_CURSOR INTO @ContractList
 WHILE @@FETCH_STATUS = 0  
 --CREATE TABLE #TEMTABLE (
 BEGIN
---INSERT INTO #Tble3
+--INSERT INTO #ContractAndDateStagingTable staging temp table
 INSERT INTO #ContractAndDateStagingTable
 SELECT @ContractList , DateData
 		--,CASE 
@@ -111,16 +117,16 @@ END
 CLOSE Contract_CURSOR 
 DEALLOCATE Contract_CURSOR
 
---Create a temporary table to hold the date 
-SELECT dt.contact, dt.date, 
+--Create a temporary table #date_andCONTRACT by using the staging table and H_DATE_RECEIVED column of the #DataTable to hold the date 
+SELECT cds.contact, cds.date, 
 		(Case
-		when dt.date = (select tp.H_DATE_RECEIVED from #temppp tp 
-		where tp.ALTERNATE_ID COLLATE DATABASE_DEFAULT = dt.contact COLLATE DATABASE_DEFAULT
-		AND tp.H_DATE_RECEIVED= dt.date) then dt.date
+		when cds.date = (select dt.H_DATE_RECEIVED from #DataTable dt 
+		where dt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = cds.contact COLLATE DATABASE_DEFAULT
+		AND tp.H_DATE_RECEIVED= cds.date) then cds.date
 		ELSE NULL
 		END) DATE_RECIEVEDD
 		INTO #date_andCONTRACT
-FROM  #ContractAndDateStagingTable dt
+FROM  #ContractAndDateStagingTable cds
 
 --where dt.contact = '001-9001015-002'
 
@@ -168,6 +174,9 @@ ORDER BY FINAL.contact, FINAL.date DESC;
 
 
 
+
+
+
 DROP TABLE #DateTable 
 DROP TABLE #DataTable
 DROP TABLE #ContractAndDateStagingTable
@@ -206,9 +215,3 @@ AND tp.ALTERNATE_ID = '001-0001002-003'
 
 
 Drop Table #Tble3
-
-
-
-
-
-*/
