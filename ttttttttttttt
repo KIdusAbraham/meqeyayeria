@@ -1,1 +1,245 @@
 --https://dba.stackexchange.com/questions/181773/sum-of-previous-n-number-of-columns-based-on-some-category
+
+
+/*
+The follwing are list of table from the databse used for the report 
+LS_BILLING_NF, LS_MASTER_NF, LS_FLOAT_NF, LS_INCOME_NF, LS_CTD_PYMTHIST_NF
+*/
+
+USE [IL10_IBERIA]
+
+DECLARE @startDate DATE
+DECLARE @endDate DATE
+DECLARE @NumberofDays int 
+--DECLARE @DATE_RECEIVED date -- database name 
+DECLARE @ContractList VARCHAR(20) -- path for backup files 
+DECLARE @Product_Line VARCHAR(10) -- used for file name 
+--DECLARE @SQL VARCHAR (2000)
+SET @startDate = (SELECT DATEADD(d, 1, PREV_CURRENT_MONTH) FROM PARAMETER_NF WHERE ALTERNATE_ID = '00*00')
+SET @endDate = (SELECT CURRENT_MONTH FROM PARAMETER_NF WHERE ALTERNATE_ID = '00*00')
+SET @NumberofDays = DATEDIFF(DAY, @endDate, @startDate)  
+
+
+--Create a Temp table to get list of days in the month 
+;WITH DateRange(DateData) AS 
+(
+    SELECT @startDate as Date
+    UNION ALL
+    SELECT DATEADD(d,1,DateData)
+    FROM DateRange 
+    WHERE DateData < @endDate
+)
+SELECT DateData
+INTO #DateTable 
+FROM DateRange
+OPTION (MAXRECURSION 0)
+
+--Get all the records needed from the tables 
+
+SELECT
+	lbn.ALTERNATE_ID,
+--	lbn.LEASE_TYPE,
+	lmn.PRODUCT_LINE,
+--	lbn.FLOAT_RATE,
+--	ISNULL(lfn.FLOAT_TYPE, '') AS 'FLOAT_TYPE',
+--	DATEADD(d, 1, @startDate) AS '@startDate',
+--	@endDate AS '@endDate',
+--	PAYHIST.ID,
+--	PAYHIST.H_POSTING_DATE,
+	PAYHIST.H_DATE_RECEIVED,
+--	ISNULL(CAST(DATEADD(d, 1, @endDate) - CAST(PAYHIST.H_POSTING_DATE AS datetime) AS int), 0) AS 'Days until EOM',
+	ISNULL(PAYHIST.RENTAL, 0) AS 'RENTAL',
+--	lbn.CBR,
+	ISNULL(lfn.PRIN_REMAIN, 0) AS 'PRIN_REMAIN',
+	--ISNULL(lin.PRINCIPAL_BALANCE, 0) AS 'PRINCIPAL_BALANCE',
+	lmn.LS_NET_INVEST,
+	lmn.BLENDED_NET_INVEST
+--	CAST(@endDate - @startDate AS int) AS 'Days in month'
+--Store outputs of the query into #DataTable temporary table 
+into #DataTable
+FROM LS_BILLING_NF lbn
+	JOIN LS_MASTER_NF lmn ON lbn.ALTERNATE_ID = lmn.ALTERNATE_ID
+	LEFT JOIN LS_FLOAT_NF lfn ON lbn.ALTERNATE_ID = lfn.ALTERNATE_ID
+	LEFT JOIN LS_INCOME_NF lin ON lmn.ALTERNATE_ID = lin.ALTERNATE_ID
+	LEFT JOIN	(
+					SELECT
+						--ID,
+						H_CONTRACT_KEY,
+						--H_POSTING_DATE,
+						H_DATE_RECEIVED,
+						SUM((ISNULL(H_FUTURE_91, 0) + ISNULL(H_FUTURE_61, 0) + ISNULL(H_FUTURE_31, 0) + ISNULL(H_CURRENT_RENTAL, 0) + ISNULL(H_PAST_1, 0) + ISNULL(H_PAST_31, 0) + ISNULL(H_PAST_61, 0) + ISNULL(H_PAST_91, 0))) AS 'RENTAL'
+					FROM LS_CTD_PYMTHIST_NF
+					GROUP BY
+						H_CONTRACT_KEY,
+						H_DATE_RECEIVED
+						--H_POSTING_DATE,
+						--ID
+				) PAYHIST ON lmn.ALTERNATE_ID = PAYHIST.H_CONTRACT_KEY AND /*PAYHIST.H_POSTING_DATE*/ PAYHIST.H_DATE_RECEIVED BETWEEN (@startDate) AND @endDate
+ORDER BY ALTERNATE_ID, /*PAYHIST.H_POSTING_DATE*/ PAYHIST.H_DATE_RECEIVED DESC
+
+SELECT * FROM #DataTable dt
+--where dt.ALTERNATE_ID = '001-9001015-002'
+order by dt.ALTERNATE_ID
+
+--Create a staging table that is used to store the data from the following cursor 
+CREATE TABLE #dateAndContractID_DDd
+	(
+	[date] date,
+	contact varchar (20),
+	Product_Line Varchar(10), 
+	RENTAL money,
+	PRIN_REMAIN money,
+	LS_NET_INVEST money,
+	 BLENDED_NET_INVEST money
+	
+
+	)
+--Create a cursor to append all contract to list of the days in the month as provided by @startDate and @endDate 
+DECLARE @DATE_RECEIVED date -- database name 
+DECLARE @Product_Line VARCHAR(10)
+DECLARE @RENTAL money
+DECLARE @PRIN_REMAIN money
+DECLARE @LS_NET_INVEST money
+DECLARE @BLENDED_NET_INVEST money
+DECLARE @ContractList VARCHAR(20) -- path for backup files 
+DECLARE @fileDate VARCHAR(20) -- used for file name 
+DECLARE @SQL VARCHAR (2000)
+
+--INNER CURSOR 
+DECLARE Contract_CURSOR CURSOR FOR 
+SELECT distinct dt.ALTERNATE_ID, dt.PRODUCT_LINE, dt.RENTAL, dt.PRIN_REMAIN, dt.LS_NET_INVEST, dt.BLENDED_NET_INVEST
+from #DataTable dt
+
+OPEN Contract_CURSOR  
+FETCH NEXT FROM Contract_CURSOR INTO @ContractList, @Product_Line,@RENTAL,@PRIN_REMAIN, @LS_NET_INVEST, @BLENDED_NET_INVEST
+WHILE @@FETCH_STATUS = 0  
+--CREATE TABLE #TEMTABLE (
+BEGIN
+--INSERT INTO #ContractAndDateStagingTable staging temp table
+INSERT INTO #dateAndContractID_DDd
+SELECT DateData, @ContractList, @Product_Line,
+		@RENTAL,@PRIN_REMAIN, @LS_NET_INVEST, @BLENDED_NET_INVEST
+		--,CASE 
+		--WHEN dt.DateData = (SELECT H_DATE_RECEIVED FROM #temppp) then dt.DateData
+		--ELSE NULL
+		--END AS H_DATE_RECEIVED 
+FROM #DateTable dt
+
+----Create a dynamic query to generate tables for each contract
+--SET @SQL = 'SELECT ' + @ContractList + ' AS cotract, DateData AS DateData
+--		INTO #'+'Temm'+@ContractList + ' from #DateTable'
+----PRINT @SQL
+--EXEC @SQL
+FETCH NEXT FROM Contract_CURSOR INTO @ContractList, @Product_Line,@RENTAL,@PRIN_REMAIN, @LS_NET_INVEST, @BLENDED_NET_INVEST
+END
+CLOSE Contract_CURSOR 
+DEALLOCATE Contract_CURSOR
+
+SELECT * FROM #dateAndContractID_DDd
+--Create a temporary table #date_andCONTRACT by using the staging table and H_DATE_RECEIVED column of the #DataTable to hold the date 
+SELECT dd.[date],
+		dd.contact, 
+		dd.Product_Line, 
+		dd.RENTAL,
+		dd.PRIN_REMAIN, 
+		dd.LS_NET_INVEST,
+		dd.BLENDED_NET_INVEST, 
+		Case
+		when dd.date = (select dt.H_DATE_RECEIVED from #DataTable dt 
+		where dt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = dd.contact COLLATE DATABASE_DEFAULT
+		AND dt.H_DATE_RECEIVED= dd.date) then dd.date
+		ELSE NULL
+		END AS DATE_RECIEVEDD
+		INTO #ContractAndDateStagingTable1
+FROM   #dateAndContractID_DDd dd
+
+SELECT * 
+FROM #ContractAndDateStagingTable1
+where contact = '001-9001015-002'
+
+
+--SELECT FINAL.contact, FINAL.date, 
+
+--		CASE
+--			WHEN FINAL.RENTAL is null then 0
+--			ELSE FINAL.RENTAL
+--		END AS [Rental Pymts], 
+--		CASE 
+--			WHEN FINAL.date = @endDate THEN
+--				IF FINAL.PRIN_REMAIN <>0
+--					BEGIN
+--					 FINAL.PRIN_REMAIN
+--					END
+--				ELSE
+--					BEGIN
+--				IF FINAL.PRODUCT_LINE = '0009'
+--					BEGIN
+--					FINAL.BLENDED_NET_INVEST
+--					END
+--				ELSE
+--					BEGIN
+--					FINAL.LS_NET_INVEST
+--					END
+--				END
+--			ELSE 
+--				(SELECT SUM(BALANCE) OVER (PARTITION BY FINAL.contact
+--							  ORDER BY FINAL.contact
+--								  ROWS @NumberofDays PRECEDING) 
+--		END AS BALANCE,-- 10 should be replaced by the number of days in the month
+
+--		AVG(FINAL.Balance) OVER(PARTITION BY FINAL.contact) AS 'Daily Average Balance'
+
+--FROM 
+--(
+
+
+SELECT cds.contact, cds.date, dt.PRODUCT_LINE, dt.H_DATE_RECEIVED, dt.RENTAL, 
+		dt.PRIN_REMAIN, dt.LS_NET_INVEST, 
+		dt.BLENDED_NET_INVEST
+INTO #FinalTable
+FROM #ContractAndDateStagingTable cds 
+LEFT JOIN #DataTable dt on dt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = cds.contact COLLATE DATABASE_DEFAULT
+		AND cds.DATE_RECIEVEDD = dt.H_DATE_RECEIVED
+
+--) AS FINAL
+--ORDER BY FINAL.contact, FINAL.date DESC;
+----where FINAL.contact = '001-9001015-002'
+
+select ff.contact,ff.date, ff.[Rental Pymts],
+sum (ff.[Rental Pymts]) over (PARTITION BY ff.contact) AS [Total ptmt made] 
+
+FROM
+(
+
+SELECT FINAL.contact, FINAL.date, 
+		CASE
+			WHEN FINAL.RENTAL is null then 0
+			ELSE FINAL.RENTAL
+		END AS [Rental Pymts], 
+		
+		CASE 
+			WHEN FINAL.date = '2018-04-30' AND FINAL.PRIN_REMAIN <>0 THEN FINAL.PRIN_REMAIN
+			WHEN FINAL.date = '2018-04-30' AND (FINAL.PRIN_REMAIN = 0 OR FINAL.PRIN_REMAIN is null) 
+				AND FINAL.PRODUCT_LINE <> '0009' THEN  FINAL.PRIN_REMAIN
+			WHEN FINAL.date = '2018-04-30' AND (FINAL.PRIN_REMAIN = 0 OR FINAL.PRIN_REMAIN is null) 
+				AND FINAL.PRODUCT_LINE = '0009' THEN  FINAL.BLENDED_NET_INVEST
+			ELSE NULL
+			END AS BALANCE
+		
+FROM #FinalTable FINAL
+WHERE FINAL.contact = '001-9001015-002'
+) ff
+
+ORDER BY ff.contact, ff.date DESC;
+
+SELECT * FROM #FinalTable
+where contact  = '001-9001015-002'
+
+
+
+
+DROP TABLE #DateTable 
+DROP TABLE #DataTable
+DROP TABLE #dateAndContractID
+DROP TABLE #ContractAndDateStagingTable
+DROP TABLE #FinalTable
