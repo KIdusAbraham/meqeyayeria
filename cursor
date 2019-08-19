@@ -164,10 +164,10 @@ SELECT FINAL.contact, FINAL.date,
 
 FROM 
 (
-SELECT dt.contact, dt.date, tp.PRODUCT_LINE, tp.H_DATE_RECEIVED, tp.RENTAL, tp.PRIN_REMAIN, tp.LS_NET_INVEST, tp.BLENDED_NET_INVEST
-FROM #date_andCONTRACT dt 
-LEFT JOIN #temppp tp on tp.ALTERNATE_ID COLLATE DATABASE_DEFAULT = dt.contact COLLATE DATABASE_DEFAULT
-		AND dt.DATE_RECIEVEDD = tp.H_DATE_RECEIVED
+SELECT cds.contact, dt.date, cds.PRODUCT_LINE, dt.H_DATE_RECEIVED, dt.RENTAL, dt.PRIN_REMAIN, dt.LS_NET_INVEST, dt.BLENDED_NET_INVEST
+FROM #ContractAndDateStagingTable cds 
+LEFT JOIN #DataTable dt on dt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = cds.contact COLLATE DATABASE_DEFAULT
+		AND cds.DATE_RECIEVEDD = dt.H_DATE_RECEIVED
 ) AS FINAL
 ORDER BY FINAL.contact, FINAL.date DESC;
 --where FINAL.contact = '001-9001015-002'
@@ -181,37 +181,3 @@ DROP TABLE #DateTable
 DROP TABLE #DataTable
 DROP TABLE #ContractAndDateStagingTable
 --DROP TABLE 
-
-
-
-/*
-
-
-SELECT *
-FROM  #DateTable dt
---DROP TABLE #DateTable
-
-
-SELECT *
-FROM  #DateTable dt
---DROP TABLE #DateTable
-
-
-
-
-SELECT * FROM #Tble3
-
-
-
-SELECT *
-FROM #temppp
---order by ALTERNATE_ID
-where ALTERNATE_ID = '001-0001002-003'
-
-SELECT * FROM #DateTable dt
-LEFT JOIN #temppp tp on tp.H_DATE_RECEIVED = dt.DateData
-AND tp.ALTERNATE_ID = '001-0001002-003'
-
-
-
-Drop Table #Tble3
