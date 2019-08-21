@@ -1,19 +1,21 @@
---https://dba.stackexchange.com/questions/181773/sum-of-previous-n-number-of-columns-based-on-some-category
-
-
-/*
-The follwing are list of table from the databse used for the report 
-LS_BILLING_NF, LS_MASTER_NF, LS_FLOAT_NF, LS_INCOME_NF, LS_CTD_PYMTHIST_NF
-*/
-
 USE [IL10_IBERIA]
+GO
 
+/****** Object:  StoredProcedure [dbo].[GetDailyAverageBalance]    Script Date: 8/21/2019 11:37:55 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[GetDailyAverageBalance]
+AS
 DECLARE @startDate DATE
 DECLARE @endDate DATE
 DECLARE @NumberofDays int 
 --DECLARE @DATE_RECEIVED date -- database name 
-DECLARE @ContractList VARCHAR(20) -- path for backup files 
-DECLARE @Product_Line VARCHAR(10) -- used for file name 
+--DECLARE @ContractList VARCHAR(20) -- path for backup files 
+--DECLARE @Product_Line VARCHAR(10) -- used for file name 
 --DECLARE @SQL VARCHAR (2000)
 SET @startDate = (SELECT DATEADD(d, 1, PREV_CURRENT_MONTH) FROM PARAMETER_NF WHERE ALTERNATE_ID = '00*00')
 SET @endDate = (SELECT CURRENT_MONTH FROM PARAMETER_NF WHERE ALTERNATE_ID = '00*00')
@@ -77,12 +79,12 @@ FROM LS_BILLING_NF lbn
 				) PAYHIST ON lmn.ALTERNATE_ID = PAYHIST.H_CONTRACT_KEY AND /*PAYHIST.H_POSTING_DATE*/ PAYHIST.H_DATE_RECEIVED BETWEEN (@startDate) AND @endDate
 ORDER BY ALTERNATE_ID, /*PAYHIST.H_POSTING_DATE*/ PAYHIST.H_DATE_RECEIVED DESC
 
-SELECT * FROM #DataTable dt
+--SELECT * FROM #DataTable dt
 --where dt.ALTERNATE_ID = '001-9001015-002'
-order by dt.ALTERNATE_ID
+--order by dt.ALTERNATE_ID
 
 --Create a staging table that is used to store the data from the following cursor 
-CREATE TABLE #dateAndContractID_DDd
+CREATE TABLE #FinalStagingTable
 	(
 	[date] date,
 	contact varchar (20),
@@ -91,9 +93,8 @@ CREATE TABLE #dateAndContractID_DDd
 	PRIN_REMAIN money,
 	LS_NET_INVEST money,
 	 BLENDED_NET_INVEST money
-	
-
 	)
+	--CREATE CLUSTERED INDEX X_FinalStagingTable on #FinalStagingTable(contact DESC, [date] DESC)
 --Create a cursor to append all contract to list of the days in the month as provided by @startDate and @endDate 
 DECLARE @DATE_RECEIVED date -- database name 
 DECLARE @Product_Line VARCHAR(10)
@@ -116,7 +117,7 @@ WHILE @@FETCH_STATUS = 0
 --CREATE TABLE #TEMTABLE (
 BEGIN
 --INSERT INTO #ContractAndDateStagingTable staging temp table
-INSERT INTO #dateAndContractID_DDd
+INSERT INTO #FinalStagingTable
 SELECT DateData, @ContractList, @Product_Line,
 		@RENTAL,@PRIN_REMAIN, @LS_NET_INVEST, @BLENDED_NET_INVEST
 		--,CASE 
@@ -124,122 +125,100 @@ SELECT DateData, @ContractList, @Product_Line,
 		--ELSE NULL
 		--END AS H_DATE_RECEIVED 
 FROM #DateTable dt
-
-----Create a dynamic query to generate tables for each contract
---SET @SQL = 'SELECT ' + @ContractList + ' AS cotract, DateData AS DateData
---		INTO #'+'Temm'+@ContractList + ' from #DateTable'
-----PRINT @SQL
---EXEC @SQL
 FETCH NEXT FROM Contract_CURSOR INTO @ContractList, @Product_Line,@RENTAL,@PRIN_REMAIN, @LS_NET_INVEST, @BLENDED_NET_INVEST
 END
 CLOSE Contract_CURSOR 
 DEALLOCATE Contract_CURSOR
 
-SELECT * FROM #dateAndContractID_DDd
+--SELECT * FROM #dateAndContractID_DDd
+
 --Create a temporary table #date_andCONTRACT by using the staging table and H_DATE_RECEIVED column of the #DataTable to hold the date 
-SELECT dd.[date],
-		dd.contact, 
-		dd.Product_Line, 
-		dd.RENTAL,
-		dd.PRIN_REMAIN, 
-		dd.LS_NET_INVEST,
-		dd.BLENDED_NET_INVEST, 
+SELECT stg.[date],
+		stg.contact, 
+		stg.PRODUCT_LINE, 
+		stg.RENTAL,
+		stg.PRIN_REMAIN, 
+		stg.LS_NET_INVEST,
+		stg.BLENDED_NET_INVEST, 
 		Case
-		when dd.date = (select dt.H_DATE_RECEIVED from #DataTable dt 
-		where dt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = dd.contact COLLATE DATABASE_DEFAULT
-		AND dt.H_DATE_RECEIVED= dd.date) then dd.date
+		when stg.date = (select dt.H_DATE_RECEIVED from #DataTable dt 
+		where dt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = stg.contact COLLATE DATABASE_DEFAULT
+		AND dt.H_DATE_RECEIVED= stg.date) then stg.date
 		ELSE NULL
-		END AS DATE_RECIEVEDD
-		INTO #ContractAndDateStagingTable1
-FROM   #dateAndContractID_DDd dd
+		END AS H_DATE_RECEIVED
+		INTO #FinalDataTable
+FROM   #FinalStagingTable stg
 
-SELECT * 
-FROM #ContractAndDateStagingTable1
-where contact = '001-9001015-002'
+--SELECT * 
+--FROM #FinalDataTable
+--where contact = '001-9001015-002'
 
 
---SELECT FINAL.contact, FINAL.date, 
-
---		CASE
---			WHEN FINAL.RENTAL is null then 0
---			ELSE FINAL.RENTAL
---		END AS [Rental Pymts], 
---		CASE 
---			WHEN FINAL.date = @endDate THEN
---				IF FINAL.PRIN_REMAIN <>0
---					BEGIN
---					 FINAL.PRIN_REMAIN
---					END
---				ELSE
---					BEGIN
---				IF FINAL.PRODUCT_LINE = '0009'
---					BEGIN
---					FINAL.BLENDED_NET_INVEST
---					END
---				ELSE
---					BEGIN
---					FINAL.LS_NET_INVEST
---					END
---				END
---			ELSE 
---				(SELECT SUM(BALANCE) OVER (PARTITION BY FINAL.contact
---							  ORDER BY FINAL.contact
---								  ROWS @NumberofDays PRECEDING) 
---		END AS BALANCE,-- 10 should be replaced by the number of days in the month
-
---		AVG(FINAL.Balance) OVER(PARTITION BY FINAL.contact) AS 'Daily Average Balance'
-
---FROM 
+--SELECT gg.*,AVG(gg.[Cumulative Sum]) OVER(PARTITION by gg.contact)  as [Cumulative AVG]
+--FROM
 --(
+SELECT ff.contact,ff.date, ff.[Rental Pymts],
+        CASE 
+		WHEN ff.date = @endDate THEN ff.BALANCE
+		ELSE
+		SUM(ff.BALANCE) OVER(partition by ff.contact order by ff.date DESC ROWS BETWEEN 
+		UNBOUNDED PRECEDING AND CURRENT ROW) 
+		END as [DAILY BALANCE], 
+		AVG(ff.BALANCE) OVER(partition by ff.contact order by ff.date DESC ROWS BETWEEN 
+		UNBOUNDED PRECEDING AND CURRENT ROW) 
+		 as [AVERAGE DAILY BALANCE] 
 
-
-SELECT cds.contact, cds.date, dt.PRODUCT_LINE, dt.H_DATE_RECEIVED, dt.RENTAL, 
-		dt.PRIN_REMAIN, dt.LS_NET_INVEST, 
-		dt.BLENDED_NET_INVEST
-INTO #FinalTable
-FROM #ContractAndDateStagingTable cds 
-LEFT JOIN #DataTable dt on dt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = cds.contact COLLATE DATABASE_DEFAULT
-		AND cds.DATE_RECIEVEDD = dt.H_DATE_RECEIVED
-
---) AS FINAL
---ORDER BY FINAL.contact, FINAL.date DESC;
-----where FINAL.contact = '001-9001015-002'
-
-select ff.contact,ff.date, ff.[Rental Pymts],
-sum (ff.[Rental Pymts]) over (PARTITION BY ff.contact) AS [Total ptmt made] 
+		--AVG(ff.BALANCE) OVER(PARTITION by ff.contact)  as [Cumulative Sum]
+		
+		--(ff.BALANCE over (partition by ff.contact order by ff.date DESC> +
+  --      sum(ff.[Rental Pymts]) over (partition by ff.contact order by ff.date DESC>) -
+  --      ff.[Rental Pymts]
+  --     ) as new_z 
+--ff.contact,ff.date, ff.[Rental Pymts],
+--		SUM (ff.[Rental Pymts]) over (PARTITION BY ff.contact) AS [Total ptmt made],  
+--		SUM (ff.BALANCE) over (PARTITION BY ff.contact) AS [TOTALBABALCE], 
+--		--CASE 
+--		--WHEN ff.date = '2018-04-30' then ff.BALANCE
+--		--ELSE
+		--(ff.BALANCE) OVER (PARTITION BY ff.contact ORDER BY ff.date DESC)+ 
+		--SUM(ff.[Rental Pymts]) OVER (PARTITION BY ff.contact ORDER BY ff.date DESC) - ff.[Rental Pymts])
+		----END 
+		--AS [DAILY BALANCE]
 
 FROM
-(
-
-SELECT FINAL.contact, FINAL.date, 
+(SELECT FINAL.contact, FINAL.date, 
 		CASE
 			WHEN FINAL.RENTAL is null then 0
 			ELSE FINAL.RENTAL
 		END AS [Rental Pymts], 
 		
 		CASE 
-			WHEN FINAL.date = '2018-04-30' AND FINAL.PRIN_REMAIN <>0 THEN FINAL.PRIN_REMAIN
-			WHEN FINAL.date = '2018-04-30' AND (FINAL.PRIN_REMAIN = 0 OR FINAL.PRIN_REMAIN is null) 
+			WHEN FINAL.date = @endDate AND FINAL.PRIN_REMAIN <>0 THEN FINAL.PRIN_REMAIN
+			WHEN FINAL.date = @endDate AND (FINAL.PRIN_REMAIN = 0 OR FINAL.PRIN_REMAIN is null) 
 				AND FINAL.PRODUCT_LINE <> '0009' THEN  FINAL.PRIN_REMAIN
-			WHEN FINAL.date = '2018-04-30' AND (FINAL.PRIN_REMAIN = 0 OR FINAL.PRIN_REMAIN is null) 
+			WHEN FINAL.date = @endDate AND (FINAL.PRIN_REMAIN = 0 OR FINAL.PRIN_REMAIN is null) 
 				AND FINAL.PRODUCT_LINE = '0009' THEN  FINAL.BLENDED_NET_INVEST
 			ELSE NULL
-			END AS BALANCE
-		
-FROM #FinalTable FINAL
-WHERE FINAL.contact = '001-9001015-002'
-) ff
+			END AS BALANCE		
+FROM #FinalDataTable FINAL
+--WHERE FINAL.contact = '001-9001015-002'
+--order by FINAL.date DESC
+) 
+ff
+--) gg
+--where gg.contact = '001-9001015-002'
+--ORDER BY ff.contact, ff.date DESC;
 
-ORDER BY ff.contact, ff.date DESC;
-
-SELECT * FROM #FinalTable
-where contact  = '001-9001015-002'
+--SELECT * FROM #FinalDataTable
+--where contact  = '001-9001015-002'
 
 
-
-
-DROP TABLE #DateTable 
+DROP TABLE #FinalDataTable
 DROP TABLE #DataTable
-DROP TABLE #dateAndContractID
-DROP TABLE #ContractAndDateStagingTable
-DROP TABLE #FinalTable
+DROP TABLE #DateTable
+DROP TABLE #FinalStagingTable
+
+
+GO
+
+
