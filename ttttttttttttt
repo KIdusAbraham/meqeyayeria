@@ -1,3 +1,37 @@
+SELECT  *--xx.ALTERNATE_ID,xx.date,xx.DATE_RECIEVEDD, xx.RENTAL,xx.PRIN_REMAIN 
+FROM
+
+(SELECT * FROM #ContractAndDateStagingTable1 t3 --where t3.contact  = '001-9001015-002'
+LEFT JOIN #DataTable tt 
+		--on tt.H_DATE_RECEIVED = t3.date
+		--on tt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = t3.contact COLLATE DATABASE_DEFAULT
+		 --on tt.H_DATE_RECEIVED = t3.DATE_RECIEVEDD
+		 --AND tt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = t3.contact COLLATE DATABASE_DEFAULT
+
+		 ON tt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = t3.contact COLLATE DATABASE_DEFAULT
+		 AND tt.H_DATE_RECEIVED = t3.DATE_RECIEVEDD
+--UNION
+--SELECT * FROM #ContractAndDateStagingTable1 t3 --where t3.contact  = '001-9001015-002'
+--LEFT JOIN #DataTable tt 
+--		--on tt.H_DATE_RECEIVED = t3.date
+--		on tt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = t3.contact COLLATE DATABASE_DEFAULT
+--		WHERE t3.DATE_RECIEVEDD is null
+		
+		--NOT IN (SELECT t3.date FROM #ContractAndDateStagingTable1 t3 --where t3.contact  = '001-9001015-002'
+		--						LEFT JOIN #DataTable tt 
+		--						--on tt.H_DATE_RECEIVED = t3.date
+		--						on tt.ALTERNATE_ID COLLATE DATABASE_DEFAULT = t3.contact COLLATE DATABASE_DEFAULT
+		--						 WHERE tt.H_DATE_RECEIVED = t3.DATE_RECIEVEDD)
+) xx	
+
+WHERE xx.contact = '001-9001015-002'
+
+
+Select * from #DataTable tt
+WHERE tt.ALTERNATE_ID = '001-9001015-002'
+
+
+
 USE [IL10_IBERIA]
 GO
 
